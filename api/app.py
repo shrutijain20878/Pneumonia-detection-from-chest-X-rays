@@ -26,6 +26,7 @@ def load_model(model_path):
     model.fc = nn.Sequential(
         nn.Linear(model.fc.in_features, 256),
         nn.ReLU(inplace=True),
+        nn.Dropout(0.5),
         nn.Linear(256, 1)
     )
 
