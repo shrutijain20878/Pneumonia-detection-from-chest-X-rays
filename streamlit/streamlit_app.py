@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 from PIL import Image
 
-API_URL = "http://api:5000/predict"  # change after deployment
+API_URL = "https://pneumonia-detection-from-chest-x-rays-eo0p.onrender.com/predict"  # change after deployment
 
 st.set_page_config(page_title="Pneumonia Detection", layout="centered")
 
