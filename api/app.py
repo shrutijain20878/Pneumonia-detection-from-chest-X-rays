@@ -3,52 +3,49 @@ import torch
 import torch.nn as nn
 from torchvision import models, transforms
 from PIL import Image
-import os
+import io
 
 # --------------------------------------------------
-# FIX 3: Disable gradients globally (huge RAM saving)
+# Global settings
 # --------------------------------------------------
-torch.set_grad_enabled(False)
-# ----------------------------
-# App & Device
-# ----------------------------
+torch.set_grad_enabled(False)   # Disable gradients
+device = torch.device("cpu")   # CPU-only (Render safe)
+
+# --------------------------------------------------
+# Flask App
+# --------------------------------------------------
 app = Flask(__name__)
-# --------------------------------------------------
-# FIX 4: FORCE CPU (Render has no GPU)
-# --------------------------------------------------
-device = torch.device("cpu")
 
 # --------------------------------------------------
-# Load ResNet Model (Optimized)
+# Load Trained ResNet18 Model
 # --------------------------------------------------
-def load_resnet(model_path):
-    #  Use ResNet18 instead of ResNet50 (critical)
+def load_model(model_path):
     model = models.resnet18(weights=None)
 
+    # Must match training architecture
     model.fc = nn.Sequential(
         nn.Linear(model.fc.in_features, 256),
-        nn.ReLU(),
+        nn.ReLU(inplace=True),
         nn.Linear(256, 1)
     )
 
-    state_dict = torch.load(
-        model_path,
-        map_location="cpu"   # VERY IMPORTANT
-    )
-
+    state_dict = torch.load(model_path, map_location=device)
     model.load_state_dict(state_dict)
+
     model.to(device)
     model.eval()
     return model
 
+
 MODEL_PATH = "saved_models/resnet_pneumonia.pth"
-model = load_resnet(MODEL_PATH)
+model = load_model(MODEL_PATH)
 
 # --------------------------------------------------
 # Image Preprocessing
 # --------------------------------------------------
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
+    transforms.Grayscale(num_output_channels=3),
     transforms.ToTensor(),
     transforms.Normalize(
         mean=[0.485, 0.456, 0.406],
@@ -62,30 +59,41 @@ def preprocess_image(image_bytes):
     return image.unsqueeze(0)
 
 # --------------------------------------------------
+# Health Check
+# --------------------------------------------------
+@app.route("/", methods=["GET"])
+def health_check():
+    return jsonify({"status": "Pneumonia Detection API is running"})
+
+# --------------------------------------------------
 # Prediction Endpoint
 # --------------------------------------------------
 @app.route("/predict", methods=["POST"])
 def predict():
     if "image" not in request.files:
-        return jsonify({"error": "No image uploaded"}), 400
+        return jsonify({"error": "Image file is required"}), 400
 
-    image_bytes = request.files["image"].read()
-    input_tensor = preprocess_image(image_bytes).to(device)
+    try:
+        image_bytes = request.files["image"].read()
+        input_tensor = preprocess_image(image_bytes).to(device)
 
-    with torch.no_grad():
-        output = torch.sigmoid(model(input_tensor)).item()
+        with torch.no_grad():
+            logits = model(input_tensor)
+            probability = torch.sigmoid(logits).item()
 
-    prediction = "PNEUMONIA" if output > 0.5 else "NORMAL"
+        prediction = "PNEUMONIA" if probability >= 0.5 else "NORMAL"
 
-    return jsonify({
-        "model": "ResNet18",
-        "prediction": prediction,
-        "confidence": round(output, 4)
-    })
+        return jsonify({
+            "model": "ResNet18",
+            "prediction": prediction,
+            "confidence": round(probability, 4)
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # --------------------------------------------------
-# Run Server (Render-safe)
+# Run Server
 # --------------------------------------------------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=5000)

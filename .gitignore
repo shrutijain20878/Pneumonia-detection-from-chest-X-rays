@@ -10,9 +10,6 @@ data/
 datasets/
 *.zip
 
-# Models (optional if large)
-*.pth
-
 # OS
 .DS_Store
 Thumbs.db
