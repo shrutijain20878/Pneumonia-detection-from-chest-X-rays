@@ -5,39 +5,50 @@ from torchvision import models, transforms
 from PIL import Image
 import os
 
+# --------------------------------------------------
+# FIX 3: Disable gradients globally (huge RAM saving)
+# --------------------------------------------------
+torch.set_grad_enabled(False)
 # ----------------------------
 # App & Device
 # ----------------------------
 app = Flask(__name__)
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# --------------------------------------------------
+# FIX 4: FORCE CPU (Render has no GPU)
+# --------------------------------------------------
+device = torch.device("cpu")
 
-# ----------------------------
-# Load ResNet Model
-# ----------------------------
+# --------------------------------------------------
+# Load ResNet Model (Optimized)
+# --------------------------------------------------
 def load_resnet(model_path):
-    model = models.resnet50(weights=None)
+    #  Use ResNet18 instead of ResNet50 (critical)
+    model = models.resnet18(weights=None)
 
     model.fc = nn.Sequential(
         nn.Linear(model.fc.in_features, 256),
         nn.ReLU(),
-        nn.Dropout(0.5),
         nn.Linear(256, 1)
     )
 
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.eval().to(device)
-    return model
+    state_dict = torch.load(
+        model_path,
+        map_location="cpu"   # VERY IMPORTANT
+    )
 
+    model.load_state_dict(state_dict)
+    model.to(device)
+    model.eval()
+    return model
 
 MODEL_PATH = "saved_models/resnet_pneumonia.pth"
 model = load_resnet(MODEL_PATH)
 
-# ----------------------------
+# --------------------------------------------------
 # Image Preprocessing
-# ----------------------------
+# --------------------------------------------------
 transform = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
+    transforms.Resize((224, 224)),
     transforms.ToTensor(),
     transforms.Normalize(
         mean=[0.485, 0.456, 0.406],
@@ -45,41 +56,36 @@ transform = transforms.Compose([
     )
 ])
 
-def preprocess_image(image_path):
-    image = Image.open(image_path).convert("RGB")
+def preprocess_image(image_bytes):
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = transform(image)
     return image.unsqueeze(0)
 
-# ----------------------------
+# --------------------------------------------------
 # Prediction Endpoint
-# ----------------------------
+# --------------------------------------------------
 @app.route("/predict", methods=["POST"])
 def predict():
     if "image" not in request.files:
         return jsonify({"error": "No image uploaded"}), 400
 
-    image_file = request.files["image"]
-    temp_path = "temp.jpg"
-    image_file.save(temp_path)
-
-    input_tensor = preprocess_image(temp_path).to(device)
+    image_bytes = request.files["image"].read()
+    input_tensor = preprocess_image(image_bytes).to(device)
 
     with torch.no_grad():
         output = torch.sigmoid(model(input_tensor)).item()
 
-    os.remove(temp_path)
-
     prediction = "PNEUMONIA" if output > 0.5 else "NORMAL"
 
     return jsonify({
-        "model": "ResNet50",
+        "model": "ResNet18",
         "prediction": prediction,
         "confidence": round(output, 4)
     })
 
-
-# ----------------------------
-# Run Server
-# ----------------------------
+# --------------------------------------------------
+# Run Server (Render-safe)
+# --------------------------------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
