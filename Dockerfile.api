@@ -8,6 +8,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY api/ .
 COPY saved_models/ saved_models/
 
-EXPOSE 5000
+EXPOSE 10000
 
 CMD ["python", "app.py"]
