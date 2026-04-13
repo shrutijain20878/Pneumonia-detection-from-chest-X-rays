@@ -37,10 +37,12 @@ def load_model(model_path):
     model.to(device)
     model.eval()
     return model
-
-
-MODEL_PATH = "saved_models/resnet_pneumonia.pth"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "..", "saved_models", "resnet_pneumonia.pth")
 model = load_model(MODEL_PATH)
+
+# MODEL_PATH = "saved_models/resnet_pneumonia.pth"
+# model = load_model(MODEL_PATH)
 
 # --------------------------------------------------
 # Image Preprocessing
