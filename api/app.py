@@ -37,8 +37,8 @@ def load_model(model_path):
     model.to(device)
     model.eval()
     return model
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "..", "saved_models", "resnet_pneumonia.pth")
+ROOT_DIR = os.getcwd()   # 🔥 points to project root on Render
+MODEL_PATH = os.path.join(ROOT_DIR, "saved_models", "resnet_pneumonia.pth")
 model = load_model(MODEL_PATH)
 
 # MODEL_PATH = "saved_models/resnet_pneumonia.pth"
